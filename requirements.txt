@@ -1,0 +1,6 @@
+Flask
+pandas
+scikit-learn
+wikipedia
+requests
+pyttsx3

@@ -1,0 +1,137 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ChatMind — All-in-One AIML Chatbot</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f4f7fb; text-align:center; }
+    #container { width: 70%; margin: 20px auto; }
+    h1 { margin-bottom: 6px; }
+    #chatArea {
+      width:100%; height: 420px; border:1px solid #ccc; background:#fff; padding:12px; overflow-y:auto; text-align:left;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    #controls { margin-top:10px; }
+    #userInput { width:60%; padding:10px; }
+    button { padding:10px 12px; margin-left:6px; cursor:pointer; border:none; background:#007bff; color:#fff; border-radius:4px; }
+    button.secondary { background:#555; }
+    .item-user { color:#0b63d6; margin-top:6px; }
+    .item-bot { color:#222; margin-top:6px; }
+    .small { font-size:12px; color:#666; margin-top:6px; }
+    .hint { font-size:13px; color:#333; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>🤖 ChatMind — AIML Chatbot (All features)</h1>
+    <div class="hint">Try: "Hi", "Weather in Hyderabad", "Wiki Python", or "News about AI"</div>
+
+    <div id="chatArea"></div>
+
+    <div id="controls">
+      <input id="userInput" type="text" placeholder="Type message or try: 'weather in Hyderabad'">
+      <button onclick="sendMessage()">Send</button>
+      <button onclick="startVoice()" title="Speak from browser">🎤 Speak</button>
+      <button class="secondary" onclick="showHistory()">📜 Show Chat History</button>
+      <button class="secondary" onclick="clearHistory()">🗑 Clear History</button>
+    </div>
+
+    <div class="small">Server-side features: TF-IDF matching, memory, wiki/weather/news integration (API keys optional).</div>
+  </div>
+
+<script>
+  // helper to append messages to chat area
+  function appendChat(speaker, text) {
+    const chat = document.getElementById("chatArea");
+    const cls = (speaker === "You") ? "item-user" : "item-bot";
+    const html = `<div class="${cls}"><b>${speaker}:</b> ${escapeHtml(text)}</div>`;
+    chat.innerHTML += html;
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function escapeHtml(unsafe) {
+    return unsafe
+         .replaceAll('&', "&amp;")
+         .replaceAll('<', "&lt;")
+         .replaceAll('>', "&gt;")
+         .replaceAll('"', "&quot;");
+  }
+
+  async function sendMessage() {
+    const inp = document.getElementById("userInput");
+    const text = inp.value.trim();
+    if (!text) return;
+    appendChat("You", text);
+    inp.value = "";
+    try {
+      const res = await fetch(`/get?msg=${encodeURIComponent(text)}`);
+      const botText = await res.text();
+      appendChat("ChatMind", botText);
+      speak(botText); // browser TTS
+    } catch (e) {
+      appendChat("ChatMind", "Error contacting server.");
+    }
+  }
+
+  // Browser Speech Recognition (works in Chromium-based browsers)
+  function startVoice() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech Recognition not supported in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const txt = event.results[0][0].transcript;
+      document.getElementById("userInput").value = txt;
+      sendMessage();
+    };
+    recognition.onerror = (e) => {
+      console.log("recognition error", e);
+    };
+    recognition.start();
+  }
+
+  // Browser TTS
+  function speak(text) {
+    if (!window.speechSynthesis) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'en-US';
+    window.speechSynthesis.cancel(); // stop other speech
+    window.speechSynthesis.speak(utter);
+  }
+
+  // Show history -> fetch /history
+  async function showHistory() {
+    try {
+      const res = await fetch("/history");
+      const data = await res.json();
+      if (!data || data.length === 0) {
+        appendChat("ChatMind", "No chat history yet.");
+        return;
+      }
+      appendChat("ChatMind", "--- Chat History ---");
+      data.forEach(item => {
+        appendChat(item.speaker, item.msg);
+      });
+    } catch (e) {
+      appendChat("ChatMind", "Could not fetch history.");
+    }
+  }
+
+  async function clearHistory() {
+    await fetch("/clear_history", {method: "POST"});
+    appendChat("ChatMind", "Chat history cleared.");
+  }
+
+  // allow Enter to send
+  document.getElementById("userInput").addEventListener("keydown", function(e){
+    if (e.key === "Enter") sendMessage();
+  });
+</script>
+</body>
+</html>
